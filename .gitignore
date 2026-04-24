@@ -1,0 +1,45 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+
+# Claude Code local state
+.claude/
+.claude.json
+**/.claude.json
+
+# MCP (real one — should never be committed with secrets)
+plugin-scaffold/.mcp.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Node / Python artifacts (если появятся hooks скрипты)
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Build / package output
+dist/
+build/
+releases/
+*.plugin.zip
+/tmp/
+
+# Notion cache / dumps
+*.notion-cache.json
+
+# Logs
+*.log
+logs/

@@ -1,0 +1,19 @@
+[Unit]
+Description=MAMS Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=team
+Group=team
+WorkingDirectory=/home/team/mams/telegram-bot
+EnvironmentFile=/home/team/mams/telegram-bot/.env
+ExecStart=/home/team/mams/telegram-bot/.venv/bin/python -m src.bot
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/team/mams/telegram-bot/logs/bot.stdout.log
+StandardError=append:/home/team/mams/telegram-bot/logs/bot.stderr.log
+
+[Install]
+WantedBy=multi-user.target

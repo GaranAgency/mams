@@ -1,0 +1,22 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "mams-local",
+  "description": "Local marketplace for MAMS (Multi-Agent Marketing System) plugin — 12 агентов под PM-Director для полного цикла интернет-маркетинга.",
+  "owner": {
+    "name": "Alex",
+    "email": "digitalgaran@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "mams",
+      "description": "Multi-Agent Marketing System — универсальная AI-команда из 12 агентов под управлением PM-Агента «Интернет-маркетолог» для полного цикла интернет-маркетинга (SEO/AEO/GEO, контент, SMM, PPC, CRO/UX, аналитика, dev, link-building). Self-improving через Skill-Updater мета-агент.",
+      "author": {
+        "name": "Alex",
+        "email": "digitalgaran@gmail.com"
+      },
+      "source": "./plugin-scaffold",
+      "category": "productivity",
+      "keywords": ["marketing", "multi-agent", "seo", "aeo", "ppc", "cro", "notion-orchestration", "self-improving"]
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "$comment": "Скопировать как .mcp.json и заполнить env-refs из .env. См. bootstrap/00-install.md § MCP для деталей по каждому серверу. Приоритеты: P0 = нужен для DG-1 (Notion). P1 = нужен для DG-3 (PM+первый специалист). P2 = по ролям.",
+  "mcpServers": {
+    "notion": {
+      "$priority": "P0",
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server"],
+      "env": {
+        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer ${NOTION_API_KEY}\", \"Notion-Version\": \"2026-03-11\"}"
+      }
+    },
+    "obsidian": {
+      "$priority": "P1",
+      "$note": "Опционально — есть curl fallback через skill obsidian-connector. Требует Obsidian Local REST API plugin.",
+      "command": "npx",
+      "args": ["-y", "@cedricchee/obsidian-mcp-server"],
+      "env": {
+        "OBSIDIAN_API_KEY": "${OBSIDIAN_API_KEY}",
+        "OBSIDIAN_URL": "${OBSIDIAN_URL}"
+      }
+    },
+    "filesystem": {
+      "$priority": "P0-builtin",
+      "$note": "Встроен в Claude Code, не требует явной конфигурации. Приводится для справки.",
+      "command": "disabled-by-default",
+      "args": []
+    },
+    "ahrefs": {
+      "$priority": "P2-seo",
+      "$note": "Для seo-aeo-specialist, analytics-specialist, link-builder. См. skill ahrefs-seo.",
+      "command": "npx",
+      "args": ["-y", "@ahrefs/mcp-server"],
+      "env": {
+        "AHREFS_API_KEY": "${AHREFS_API_KEY}"
+      }
+    },
+    "semrush": {
+      "$priority": "P2-seo",
+      "$note": "Fallback для ahrefs + primary для paid research. См. skill semrush-api.",
+      "command": "npx",
+      "args": ["-y", "semrush-mcp-community"],
+      "env": {
+        "SEMRUSH_API_KEY": "${SEMRUSH_API_KEY}"
+      }
+    },
+    "apify": {
+      "$priority": "P2-niche",
+      "$note": "Для niche-expert (web scraping), skill-updater (market intel). Rotate 4 keys per skill apify-api.",
+      "command": "npx",
+      "args": ["-y", "@apify/actors-mcp-server"],
+      "env": {
+        "APIFY_TOKEN": "${APIFY_TOKEN_PRIMARY}"
+      }
+    },
+    "hunter-io": {
+      "$priority": "P2-outreach",
+      "$note": "Для link-builder — email finder + verify. См. skill hunter-io.",
+      "command": "npx",
+      "args": ["-y", "hunter-io-mcp"],
+      "env": {
+        "HUNTER_API_KEY": "${HUNTER_API_KEY}"
+      }
+    },
+    "notebooklm": {
+      "$priority": "P2-research",
+      "$note": "Для niche-expert, skill-updater, strategist. Опционально.",
+      "command": "npx",
+      "args": ["-y", "notebooklm-mcp-unofficial"],
+      "env": {
+        "NOTEBOOKLM_AUTH": "${NOTEBOOKLM_AUTH}"
+      }
+    },
+    "supabase": {
+      "$priority": "P3-phase2",
+      "$note": "Для Skills Registry backend (Phase 2). В Phase 1 skill-файлы — Git-only.",
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server"],
+      "env": {
+        "SUPABASE_URL": "${SUPABASE_URL}",
+        "SUPABASE_SERVICE_ROLE_KEY": "${SUPABASE_SERVICE_ROLE_KEY}"
+      }
+    },
+    "vercel": {
+      "$priority": "P3-dev",
+      "$note": "Для dev-qa — deploy workflows.",
+      "command": "npx",
+      "args": ["-y", "@vercel/mcp-server"],
+      "env": {
+        "VERCEL_ACCESS_TOKEN": "${VERCEL_ACCESS_TOKEN}"
+      }
+    },
+    "netlify": {
+      "$priority": "P3-dev",
+      "$note": "Альтернатива Vercel для dev-qa.",
+      "command": "npx",
+      "args": ["-y", "@netlify/mcp"],
+      "env": {
+        "NETLIFY_AUTH_TOKEN": "${NETLIFY_AUTH_TOKEN}"
+      }
+    },
+    "figma": {
+      "$priority": "P3-design",
+      "$note": "Для cro-ux-specialist — design handoff.",
+      "command": "npx",
+      "args": ["-y", "figma-mcp-server"],
+      "env": {
+        "FIGMA_ACCESS_TOKEN": "${FIGMA_ACCESS_TOKEN}"
+      }
+    }
+  }
+}

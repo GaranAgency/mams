@@ -1,0 +1,42 @@
+{
+  "$comment": "MAMS hooks stub — активируется после DG-2. Рекомендации ниже — draft, доделать на сервере. Полный список hook-events см. docs Claude Code + Agent SDK.",
+  "$planned_hooks": {
+    "PreToolUse": [
+      {
+        "$note": "Block Red-tier actions без approval. Проверить что approver_needed=sync + status=approved в Decisions & Approvals DB.",
+        "matcher": "*",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/check-red-tier-approval.js",
+        "disabled": true
+      },
+      {
+        "$note": "Enforce per-agent tool allowlist/denylist (Architecture Report §13, Skill Inventory §5).",
+        "matcher": "*",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/enforce-agent-permissions.js",
+        "disabled": true
+      }
+    ],
+    "PostToolUse": [
+      {
+        "$note": "Auto-log significant actions в Notion Activity Log (по категориям из CLAUDE.md).",
+        "matcher": "Write|Edit|Bash",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/auto-log-activity.js",
+        "disabled": true
+      }
+    ],
+    "SessionStart": [
+      {
+        "$note": "Warm-up: проверить доступность Notion/Obsidian MCP, загрузить текущий project context из Projects Registry.",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/warmup.js",
+        "disabled": true
+      }
+    ],
+    "Stop": [
+      {
+        "$note": "Graceful close — flush outbox (Notion / Obsidian), финализировать Activity Log entry с session summary.",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-wrap.js",
+        "disabled": true
+      }
+    ]
+  },
+  "hooks": {}
+}
