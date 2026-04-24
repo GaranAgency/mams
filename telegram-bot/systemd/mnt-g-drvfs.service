@@ -1,0 +1,16 @@
+[Unit]
+Description=Mount Google Drive (G:) as /mnt/g via drvfs
+After=network-online.target
+Wants=network-online.target
+Before=mams-tg-bot.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/mkdir -p /mnt/g
+# Retry up to 6 times (60s total) in case Google Drive Desktop is still starting
+ExecStart=/bin/bash -c 'for i in 1 2 3 4 5 6; do mountpoint -q /mnt/g && exit 0; mount -t drvfs G: /mnt/g && exit 0; sleep 10; done; echo "G: not available after 60s"; exit 1'
+ExecStop=/bin/umount /mnt/g
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,8 @@
 [Unit]
 Description=MAMS Telegram Bot
-After=network-online.target
+After=network-online.target mnt-g-drvfs.service
 Wants=network-online.target
+Requires=mnt-g-drvfs.service
 
 [Service]
 Type=simple
