@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# MAMS secrets backup: collects sensitive state, age-encrypts, uploads to Drive.
-# Runs weekly via cron. Recovery: decrypt with ~/.age/key.txt (kept in 1Password).
+# MAMS secrets backup: collects ALL sensitive state (env, auth, plugins, memory),
+# age-encrypts, uploads to Drive. Runs weekly via cron.
+# Recovery: bash recovery.sh  (asks for age private key, restores everything)
 
 export PATH="$HOME/.local/bin:$PATH"
 export HOME="${HOME:-/home/team}"
@@ -20,36 +21,37 @@ exec >> "$LOG" 2>&1
 echo ""
 echo "==== $(date -u +%FT%TZ) secrets-backup start ===="
 
-if [[ ! -f "$PUBKEY_FILE" ]]; then
-  echo "ERROR: public key missing at $PUBKEY_FILE"
-  exit 1
-fi
+[[ -f "$PUBKEY_FILE" ]] || { echo "ERROR: $PUBKEY_FILE missing"; exit 1; }
+[[ -d "$BACKUP_DIR" ]] || { echo "ERROR: $BACKUP_DIR unreachable (drvfs not mounted?)"; exit 1; }
 
 PUBKEY=$(cat "$PUBKEY_FILE")
 
-if [[ ! -d "$BACKUP_DIR" ]]; then
-  echo "ERROR: backup dir unreachable: $BACKUP_DIR (is /mnt/g mounted?)"
-  exit 1
-fi
-
-# Staging directory with structure preserved
 cd "$WORK_DIR"
 mkdir -p staging
 
-# .env files under mams/
+# 1. .env files under mams/
 find "$HOME/mams" -name ".env" -type f 2>/dev/null | while read -r f; do
   rel=${f#$HOME/}
   mkdir -p "staging/$(dirname "$rel")"
   cp "$f" "staging/$rel"
 done
 
-# /home/team/.mams/ (bindings, sessions, outbox)
+# 2. /home/team/.mams/ — bot bindings, sessions, outbox
 if [[ -d "$HOME/.mams" ]]; then
   mkdir -p staging/.mams
   cp -r "$HOME/.mams/." "staging/.mams/" 2>/dev/null || true
 fi
 
-# Claude memory (both projects)
+# 3. Claude Code auth + config + plugins
+mkdir -p staging/.claude/plugins
+for f in .credentials.json settings.json settings.local.json mcp-needs-auth-cache.json; do
+  [[ -f "$HOME/.claude/$f" ]] && cp "$HOME/.claude/$f" "staging/.claude/$f"
+done
+for f in installed_plugins.json known_marketplaces.json; do
+  [[ -f "$HOME/.claude/plugins/$f" ]] && cp "$HOME/.claude/plugins/$f" "staging/.claude/plugins/$f"
+done
+
+# 4. Claude memory (per-project)
 for proj_memory in "$HOME/.claude/projects"/*/memory; do
   [[ -d "$proj_memory" ]] || continue
   rel=${proj_memory#$HOME/}
@@ -57,53 +59,55 @@ for proj_memory in "$HOME/.claude/projects"/*/memory; do
   cp -r "$proj_memory" "staging/$rel" 2>/dev/null || true
 done
 
-# age identity (circular, but convenient for single-laptop recovery if 1Password lost)
-# Encrypted with same key → user still needs key to decrypt. So don't include private key.
-# Include ONLY public key for reference.
-if [[ -f "$HOME/.age/public.key" ]]; then
-  mkdir -p staging/.age
-  cp "$HOME/.age/public.key" staging/.age/
+# 5. git-credentials (contains GitHub PAT)
+[[ -f "$HOME/.git-credentials" ]] && cp "$HOME/.git-credentials" staging/.git-credentials
+if [[ -f "$HOME/.gitconfig" ]]; then
+  cp "$HOME/.gitconfig" staging/.gitconfig
 fi
 
-# Manifest
+# 6. age public key (for reference — private key is required separately via 1Password)
+[[ -f "$HOME/.age/public.key" ]] && mkdir -p staging/.age && cp "$HOME/.age/public.key" staging/.age/
+
+# 7. Manifest + version tag
 cat > staging/MANIFEST.txt <<EOF
 MAMS secrets backup
 Date: $(date -u +%FT%TZ)
 Host: $(hostname)
 User: $USER
 Public key: $PUBKEY
+Backup format version: 2
 
-Contents:
+Contents (tree from \$HOME):
 $(cd staging && find . -type f | sort)
 
 Recovery:
-  age -d -i ~/.age/key.txt mams-secrets-YYYY-MM-DD.age > extracted.tar.gz
-  tar xzf extracted.tar.gz
-  # Place files back to their original paths under \$HOME
+  # Download recovery.sh from Drive (it's unencrypted, next to .age files):
+  cp "/mnt/g/Shared drives/ai/mams-state-backup/recovery.sh" ~/
+  bash ~/recovery.sh
+  # Script will ask for age private key once — that's it.
 EOF
 
-# Create archive + encrypt
+# Archive + encrypt
 tar czf "$ARCHIVE" -C staging .
-ARCHIVE_SIZE=$(stat -c%s "$ARCHIVE")
-echo "archive: $ARCHIVE ($ARCHIVE_SIZE bytes)"
-
 age -r "$PUBKEY" -o "$ENCRYPTED" "$ARCHIVE"
-ENCRYPTED_SIZE=$(stat -c%s "$ENCRYPTED")
-echo "encrypted: $ENCRYPTED ($ENCRYPTED_SIZE bytes)"
+echo "archive: $(stat -c%s "$ARCHIVE") bytes → encrypted: $(stat -c%s "$ENCRYPTED") bytes"
 
-# Upload (copy) to Drive
+# Upload
 cp "$ENCRYPTED" "$BACKUP_DIR/$ENCRYPTED"
 echo "uploaded: $BACKUP_DIR/$ENCRYPTED"
 
-# Retention: keep last 8 weekly backups (~2 months)
+# Also copy/update recovery.sh on Drive (unencrypted — it has no secrets)
+cp "$HOME/mams/scripts/recovery.sh" "$BACKUP_DIR/recovery.sh" 2>/dev/null && \
+  echo "refreshed: $BACKUP_DIR/recovery.sh" || \
+  echo "NOTE: $HOME/mams/scripts/recovery.sh not found yet"
+
+# Retention: keep last 8 weekly backups
 cd "$BACKUP_DIR"
 ls -1t mams-secrets-*.age 2>/dev/null | tail -n +9 | while read -r old; do
   rm -f "$old"
   echo "pruned: $old"
 done
 
-# Cleanup
 cd /
 rm -rf "$WORK_DIR"
-
 echo "==== $(date -u +%FT%TZ) secrets-backup done ===="
