@@ -53,6 +53,7 @@ def main():
         Application.builder()
         .token(config.TELEGRAM_BOT_TOKEN)
         .post_init(post_init)
+        .concurrent_updates(True)
         .build()
     )
 

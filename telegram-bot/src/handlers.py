@@ -151,8 +151,6 @@ async def _process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, p
         return
 
     async with _chat_locks[chat_id]:
-        await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-
         try:
             file_paths = await _download_files(message, chat_id, context.bot)
         except Exception as e:
@@ -175,6 +173,17 @@ async def _process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, p
 
         session_id = sessions.get(chat_id, project_code)
 
+        # keepalive typing indicator while Claude works
+        async def _keep_typing():
+            try:
+                while True:
+                    await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+                    await asyncio.sleep(4)
+            except asyncio.CancelledError:
+                pass
+
+        typing_task = asyncio.create_task(_keep_typing())
+
         try:
             new_sid, response = await run_claude(
                 prompt=prompt,
@@ -186,6 +195,12 @@ async def _process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, p
             log.exception("claude failed")
             await message.reply_text(f"⚠️ Claude вернул ошибку: {e}")
             return
+        finally:
+            typing_task.cancel()
+            try:
+                await typing_task
+            except (asyncio.CancelledError, Exception):
+                pass
 
         if new_sid:
             sessions.update(chat_id, project_code, new_sid)
