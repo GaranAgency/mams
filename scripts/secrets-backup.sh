@@ -96,10 +96,20 @@ echo "archive: $(stat -c%s "$ARCHIVE") bytes → encrypted: $(stat -c%s "$ENCRYP
 cp "$ENCRYPTED" "$BACKUP_DIR/$ENCRYPTED"
 echo "uploaded: $BACKUP_DIR/$ENCRYPTED"
 
-# Also copy/update recovery.sh on Drive (unencrypted — it has no secrets)
-cp "$HOME/mams/scripts/recovery.sh" "$BACKUP_DIR/recovery.sh" 2>/dev/null && \
-  echo "refreshed: $BACKUP_DIR/recovery.sh" || \
-  echo "NOTE: $HOME/mams/scripts/recovery.sh not found yet"
+# Also mirror all scripts + README on Drive (unencrypted — they have no secrets)
+AI_ROOT="/mnt/g/Shared drives/ai"
+SCRIPTS_SRC="$HOME/mams/scripts"
+for f in recovery.sh secrets-backup.sh git-backup.sh install-systemd.sh; do
+  if [[ -f "$SCRIPTS_SRC/$f" ]]; then
+    cp "$SCRIPTS_SRC/$f" "$BACKUP_DIR/$f"
+    echo "mirrored: $BACKUP_DIR/$f"
+  fi
+done
+# recovery.sh + README also at ai/ root for quick access
+cp "$SCRIPTS_SRC/recovery.sh" "$AI_ROOT/recovery.sh" 2>/dev/null && \
+  echo "refreshed: $AI_ROOT/recovery.sh"
+cp "$SCRIPTS_SRC/README-drive.txt" "$AI_ROOT/README.txt" 2>/dev/null && \
+  echo "refreshed: $AI_ROOT/README.txt"
 
 # Retention: keep last 8 weekly backups
 cd "$BACKUP_DIR"
