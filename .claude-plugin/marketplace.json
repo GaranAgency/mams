@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "mams-local",
-  "description": "Local marketplace for MAMS (Multi-Agent Marketing System) plugin — 12 агентов под PM-Director для полного цикла интернет-маркетинга.",
+  "name": "mams",
+  "description": "Marketplace for MAMS (Multi-Agent Marketing System) plugin — 12 агентов под PM-Director для полного цикла интернет-маркетинга.",
   "owner": {
     "name": "Alex",
     "email": "digitalgaran@gmail.com"
