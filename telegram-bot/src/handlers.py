@@ -24,6 +24,18 @@ rate_limit = DailyRateLimiter()
 _chat_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
+def _capture_enabled(chat_type: str, chat_id: int) -> bool:
+    """
+    True only for project-bound group chats. DMs and unbound groups are
+    excluded — they lack stable project context (a DM can switch /project
+    freely; an unbound group has no project at all). Therefore captured
+    history would be unattributable per project. See spec §3 and §7.
+    """
+    if chat_type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        return False
+    return bool(project_map.get_group_project(chat_id))
+
+
 def _is_alex(update: Update) -> bool:
     u = update.effective_user
     if not u:
@@ -175,17 +187,19 @@ async def _process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, p
         user_name = user.full_name + (f" @{user.username}" if user.username else "")
 
         # Build conversation-context block from messages since last bot reply.
+        # Only meaningful for project-bound groups (see _capture_enabled).
         context_block = ""
-        try:
-            state = capture.get_state(chat_id)
-            since_id = state.get("last_responded_message_id")
-            recent = capture.read_recent(chat_id, since_id, exclude_message_id=message.message_id)
-            context_block = capture.format_for_prompt(chat_id, recent)
-            if context_block:
-                log.info("context: chat=%s loaded %d messages since msg_id=%s",
-                         chat_id, len(recent), since_id)
-        except Exception:
-            log.exception("capture context build failed; proceeding without context")
+        if _capture_enabled(chat.type, chat_id):
+            try:
+                state = capture.get_state(chat_id)
+                since_id = state.get("last_responded_message_id")
+                recent = capture.read_recent(chat_id, since_id, exclude_message_id=message.message_id)
+                context_block = capture.format_for_prompt(chat_id, recent)
+                if context_block:
+                    log.info("context: chat=%s loaded %d messages since msg_id=%s",
+                             chat_id, len(recent), since_id)
+            except Exception:
+                log.exception("capture context build failed; proceeding without context")
 
         prompt = _build_prompt(
             user_text=user_text or "(без текста, только файл)",
@@ -243,8 +257,9 @@ async def _process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, p
                 await message.reply_text(chunk)
 
         # Mark this message as the boundary: future context blocks will start
-        # from messages with id > this one.
-        capture.update_state(chat_id, message.message_id)
+        # from messages with id > this one. Only for capture-enabled chats.
+        if _capture_enabled(chat.type, chat_id):
+            capture.update_state(chat_id, message.message_id)
 
 
 def _chunk_text(text: str, limit: int = 3900) -> list[str]:
@@ -274,9 +289,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not message or not chat or not user:
         return
 
-    # Capture EVERY incoming message (including from other bots) for context.
-    # Best-effort: never blocks the response path.
-    capture.append(message)
+    # Capture only messages from project-bound groups. DMs and unbound groups
+    # are NOT captured — they lack stable project context (DMs can switch
+    # active project freely; unbound groups have no project at all). Reason:
+    # context blocks must be unambiguously attributable to one project to be
+    # useful. See spec §3 (storage layout) and §7 (edge cases).
+    if _capture_enabled(chat.type, chat.id):
+        capture.append(message)
 
     # Bot self-messages don't trigger responses (we don't want feedback loops).
     if user.is_bot:

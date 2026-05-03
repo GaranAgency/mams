@@ -15,19 +15,20 @@
 Бот сейчас в группах **отвечает** только на @-mention'ы и reply'и, но также **видит** только их (Telegram bot privacy mode). Все остальные сообщения проходят мимо.
 
 После этой фичи бот:
-1. **Видит каждое сообщение** в привязанных группах и DM (privacy mode выключен в BotFather, бот заново добавлен в группу)
-2. **Хранит** их в JSONL ленте per-chat (append-only, навсегда)
-3. **Перед каждым своим ответом** читает recent history `с момента последнего своего ответа`, добавляет в Claude prompt как «вот что обсуждалось пока меня не было»
+1. **Видит каждое сообщение** в группах после того как privacy mode выключен в BotFather и бот заново добавлен (в DM ничего не меняется — он и так видит всё)
+2. **Хранит только сообщения из проектно-привязанных групп** (`/bind <CODE>` сделан) в JSONL ленте per-chat (append-only, навсегда). DM **не сохраняем** — нет стабильного project-context (Alex может переключать `/project` свободно). Группы без `/bind` тоже не сохраняем — нет проекта вообще.
+3. **Перед каждым своим ответом в group-bound чате** читает recent history `с момента последнего своего ответа`, добавляет в Claude prompt как «вот что обсуждалось пока меня не было»
 
 Триггеры ответов **не меняются** — бот по-прежнему отвечает только на @-mention/reply. Меняется качество ответа: теперь учитывает контекст разговора.
 
 ### Definition of Done
 
-1. Каждое сообщение в группе `garan ai` (chat -5229557142) и DM с Alex'ом (chat 490844407) пишется в `inbox/<chat_id>/messages.jsonl` (одна строка per сообщение)
-2. Файл `state.json` per-chat содержит `last_responded_message_id` — обновляется после каждого успешного ответа бота
-3. При @-mention/reply бот собирает context block из сообщений `between last_responded и current`, ограниченный 50 сообщ или 6000 симв (что наступит раньше)
-4. Context block передаётся в Claude prompt; бот в ответе явно опирается на свежий контекст когда уместно
-5. Smoke-test: написать в группе 3 не-mention сообщения «креативы готовы / дизайн поправил / завтра встреча 11 утра», потом @mention «что у нас по статусу?» → ответ бота упоминает все 3 темы
+1. Каждое сообщение в группе `garan ai` (chat -5229557142, привязана к проекту GRN) пишется в `inbox/-5229557142/messages.jsonl` (одна строка per сообщение)
+2. **DM с Alex'ом (chat 490844407) НЕ capture'ится** — нет стабильного project-context
+3. Файл `state.json` per-group содержит `last_responded_message_id` — обновляется после каждого успешного ответа бота в этой группе
+4. При @-mention/reply в group-bound чате бот собирает context block из сообщений `between last_responded и current`, ограниченный 50 сообщ или 6000 симв (что наступит раньше)
+5. Context block передаётся в Claude prompt; бот в ответе явно опирается на свежий контекст когда уместно
+6. Smoke-test: написать в группе 3 не-mention сообщения «креативы готовы / дизайн поправил / завтра встреча 11 утра», потом @mention «что у нас по статусу?» → ответ бота упоминает все 3 темы
 
 ---
 
@@ -83,15 +84,19 @@
 
 ```
 /home/team/mams/telegram-bot/inbox/
-  -5229557142/                    ← chat_id GRN group
-    messages.jsonl                 ← append-only, hawever big
+  -5229557142/                    ← chat_id GRN group (привязана через /bind GRN)
+    messages.jsonl                 ← append-only, ever-growing
     state.json                     ← {"last_responded_message_id": int, "last_responded_at": "ISO8601"}
-  490844407/                      ← chat_id Alex DM
+  <future_bound_group_chat_id>/   ← новые группы автоматически когда им сделают /bind
     messages.jsonl
     state.json
-  <future_chat_id>/               ← новые привязанные группы автоматически
-    ...
+
+  490844407/                      ← Alex DM — directory may exist but messages.jsonl
+                                     and state.json НЕ создаются (capture skipped per §1)
+                                     (other files like downloaded photos могут быть)
 ```
+
+**Capture-eligible chat:** `chat.type ∈ {GROUP, SUPERGROUP}` AND `project_map.get_group_project(chat.id)` returns non-empty project code. Implemented as `_capture_enabled(chat_type, chat_id)` helper в handlers.py.
 
 ### messages.jsonl format
 
@@ -230,6 +235,8 @@ Service messages (member added/left, pinned, etc.) **не пропускаютс
 | Edit message (`edited_message` Update) | **Phase A: ignore** — обновление не записываем. Phase B: добавим update-логику (отдельная строка с `"edit_of": <orig_message_id>`) |
 | Бот сам инициирует сообщение (например `/mams-standup`) | **Phase A: НЕ записываем** — бот не получает свои собственные исходящие как Update. Если хотим — можно вручную писать в JSONL после `sendMessage` от standup'а. Голосуем отложить в Phase B |
 | Сообщение от другого бота (например, GitHub bot пишет в группу) | Capture'ится как обычное сообщение (`is_bot=true`, но мы это не фильтруем — для контекста это полезно) |
+| Сообщение в DM с ботом | **НЕ capture'ится** — нет стабильного project-context. Reason: Alex переключает `/project` свободно, message 5 минут назад мог относиться к другому проекту. |
+| Сообщение в группе без /bind | **НЕ capture'ится** — нет проекта вообще. После /bind будущие сообщения начнут capture'иться. |
 | Service message (chat_member, pinned, etc.) | Filter'ом не пропускается → не capture'ится |
 | Gap > 50 сообщений с прошлого ответа | Берём последние 50, header `[пропущено N старых сообщений]` |
 | Gap > 6000 chars текста | Берём последние ~5000 chars, header `[пропущено N старых сообщений]` |
