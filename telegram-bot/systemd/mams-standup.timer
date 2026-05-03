@@ -1,0 +1,16 @@
+[Unit]
+Description=MAMS daily standup timer (10:00 America/New_York)
+Documentation=file:///home/team/mams/docs/superpowers/specs/2026-05-02-mams-walking-skeleton-design.md
+
+[Timer]
+# 10:00 local time (America/New_York). systemd resolves OnCalendar against
+# the system timezone (verified: /etc/timezone = America/New_York).
+OnCalendar=*-*-* 10:00:00
+# If the machine was off at 10:00, run at next boot (within reason).
+Persistent=true
+# Don't fire too eagerly relative to wall-clock skew; small randomized delay.
+AccuracySec=1min
+Unit=mams-standup.service
+
+[Install]
+WantedBy=timers.target

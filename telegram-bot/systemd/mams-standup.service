@@ -1,0 +1,20 @@
+[Unit]
+Description=MAMS daily standup — generate and post stuck-tasks message to bound Telegram channels
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=team
+Group=team
+WorkingDirectory=/home/team/mams
+ExecStart=/usr/bin/python3 /home/team/mams/scripts/mams_standup.py
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=180
+# Environment: PATH minimal, but script uses absolute paths
+Environment=HOME=/home/team
+Environment=PATH=/home/team/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+[Install]
+WantedBy=multi-user.target
