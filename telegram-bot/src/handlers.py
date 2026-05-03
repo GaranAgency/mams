@@ -9,7 +9,7 @@ from telegram import Update, Message
 from telegram.constants import ChatAction, ChatType, ParseMode
 from telegram.ext import ContextTypes
 
-from . import config
+from . import capture, config
 from .claude_bridge import run_claude, ClaudeError
 from .project_map import ProjectMap
 from .rate_limit import DailyRateLimiter
@@ -90,6 +90,7 @@ def _build_prompt(
     user_name: str,
     is_alex: bool,
     file_paths: list[str],
+    context_block: str = "",
 ) -> str:
     file_section = ""
     if file_paths:
@@ -97,6 +98,18 @@ def _build_prompt(
         file_section = f"\n\nAttached files (use Read tool to inspect):\n{lines}"
 
     alex_note = " (владелец MAMS, Alex)" if is_alex else " (участник команды)"
+
+    context_instruction = ""
+    user_message_payload = user_text
+    if context_block:
+        context_instruction = (
+            "\n\nКОНТЕКСТ РАЗГОВОРА:\n"
+            "Перед текстом обращения к тебе ниже идёт блок «Что обсуждалось в группе...».\n"
+            "Учитывай его как контекст разговора, но отвечай ТОЛЬКО на сообщение которое\n"
+            "идёт после маркера «Конец истории». Не пересказывай контекст в ответе если\n"
+            "тебя явно об этом не просят — просто используй информацию.\n"
+        )
+        user_message_payload = f"{context_block}\n\n{user_text}"
 
     return f"""[TG-BOT CONTEXT — inject before handling user intent]
 
@@ -122,10 +135,10 @@ User: {user_name}{alex_note}
 5. Для маркетинговых intent'ов делегируй через Task tool в mams:pm-director.
 6. Для инфраструктурных/meta-вопросов про MAMS сам отвечай напрямую.
 7. Respect tiered HITL: Red-tier actions не исполняй без approval, флагни в ответе.
-8. Ответ для Telegram — на русском, лаконично, без большого markdown (только жирный *text* и списки). Длинные ответы разбивай логически, но один ответ = одно сообщение.
+8. Ответ для Telegram — на русском, лаконично, без большого markdown (только жирный *text* и списки). Длинные ответы разбивай логически, но один ответ = одно сообщение.{context_instruction}
 
 USER MESSAGE:
-{user_text}{file_section}
+{user_message_payload}{file_section}
 """.strip()
 
 
@@ -161,6 +174,19 @@ async def _process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, p
         chat_title = chat.title or chat.username or "DM"
         user_name = user.full_name + (f" @{user.username}" if user.username else "")
 
+        # Build conversation-context block from messages since last bot reply.
+        context_block = ""
+        try:
+            state = capture.get_state(chat_id)
+            since_id = state.get("last_responded_message_id")
+            recent = capture.read_recent(chat_id, since_id, exclude_message_id=message.message_id)
+            context_block = capture.format_for_prompt(chat_id, recent)
+            if context_block:
+                log.info("context: chat=%s loaded %d messages since msg_id=%s",
+                         chat_id, len(recent), since_id)
+        except Exception:
+            log.exception("capture context build failed; proceeding without context")
+
         prompt = _build_prompt(
             user_text=user_text or "(без текста, только файл)",
             project_code=project_code,
@@ -169,6 +195,7 @@ async def _process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, p
             user_name=user_name,
             is_alex=is_alex,
             file_paths=file_paths,
+            context_block=context_block,
         )
 
         session_id = sessions.get(chat_id, project_code)
@@ -215,6 +242,10 @@ async def _process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, p
             except Exception:
                 await message.reply_text(chunk)
 
+        # Mark this message as the boundary: future context blocks will start
+        # from messages with id > this one.
+        capture.update_state(chat_id, message.message_id)
+
 
 def _chunk_text(text: str, limit: int = 3900) -> list[str]:
     if len(text) <= limit:
@@ -242,6 +273,12 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not message or not chat or not user:
         return
+
+    # Capture EVERY incoming message (including from other bots) for context.
+    # Best-effort: never blocks the response path.
+    capture.append(message)
+
+    # Bot self-messages don't trigger responses (we don't want feedback loops).
     if user.is_bot:
         return
 

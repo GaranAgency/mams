@@ -67,7 +67,18 @@ def main():
 
     app.add_handler(
         MessageHandler(
-            (filters.TEXT | filters.Document.ALL | filters.PHOTO | filters.CAPTION)
+            (
+                filters.TEXT
+                | filters.CAPTION
+                | filters.PHOTO
+                | filters.Document.ALL
+                | filters.VOICE
+                | filters.VIDEO
+                | filters.VIDEO_NOTE
+                | filters.AUDIO
+                | filters.Sticker.ALL
+                | filters.ANIMATION
+            )
             & ~filters.COMMAND,
             on_message,
         )
