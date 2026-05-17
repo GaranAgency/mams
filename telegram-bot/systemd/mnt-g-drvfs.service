@@ -1,16 +1,33 @@
 [Unit]
-Description=Mount Google Drive (G:) as /mnt/g via drvfs
+Description=Mount Google Drive (G:) as /mnt/g via drvfs (self-healing)
 After=network-online.target
 Wants=network-online.target
 Before=mams-tg-bot.service
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
+# Type=simple lets us loop forever: periodic mountpoint check + re-mount on
+# disconnect. Replaces the old oneshot that gave up after 60s if Google Drive
+# Desktop on the Windows side wasn't ready in time — leaving /mnt/g broken
+# until manual intervention.
+Type=simple
+Restart=always
+RestartSec=30
+
 ExecStartPre=/bin/mkdir -p /mnt/g
-# Retry up to 6 times (60s total) in case Google Drive Desktop is still starting
-ExecStart=/bin/bash -c 'for i in 1 2 3 4 5 6; do mountpoint -q /mnt/g && exit 0; mount -t drvfs G: /mnt/g && exit 0; sleep 10; done; echo "G: not available after 60s"; exit 1'
-ExecStop=/bin/umount /mnt/g
+
+# Every 60s, if /mnt/g is not a mountpoint, try to mount. drvfs returns
+# non-zero if Drive Desktop isn't running yet — we swallow that (|| true)
+# and try again next tick. drvfs picks up automatically once Drive Desktop
+# on Windows becomes available again (e.g. after host wake from sleep).
+ExecStart=/bin/bash -c '\
+  while true; do \
+    if ! mountpoint -q /mnt/g; then \
+      mount -t drvfs G: /mnt/g 2>/dev/null || true; \
+    fi; \
+    sleep 60; \
+  done'
+
+ExecStop=/bin/sh -c '/bin/umount /mnt/g 2>/dev/null || true'
 
 [Install]
 WantedBy=multi-user.target

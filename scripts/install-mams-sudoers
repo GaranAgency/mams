@@ -1,0 +1,9 @@
+# /etc/sudoers.d/mams-services
+# Lets `team` user re-trigger the Google Drive mount service without password,
+# so cron pre-flight (ensure-drive-mounted.sh) can self-heal a disconnect
+# unattended.
+#
+# Tight scope: only this one service, only these verbs.
+team ALL=(root) NOPASSWD: /bin/systemctl start mnt-g-drvfs.service
+team ALL=(root) NOPASSWD: /bin/systemctl restart mnt-g-drvfs.service
+team ALL=(root) NOPASSWD: /bin/systemctl is-active mnt-g-drvfs.service
