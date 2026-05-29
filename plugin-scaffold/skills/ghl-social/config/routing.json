@@ -1,0 +1,8 @@
+{
+  "_comment": "Routing map: [CODE] -> { keyfile, locationId }. Token lives in ~/.claude-secrets/<keyfile>. NO TOKENS HERE — only Location IDs (not secret). [CODE] keys match the MAMS client codes used in tg-project-map.json and Notion Projects Registry.",
+  "GRN": {
+    "keyfile": "ghl-grn.key",
+    "locationId": "NIidPrbh6OsfONebTfFg",
+    "label": "Garan Agency"
+  }
+}
